@@ -7,11 +7,13 @@ from .types import LLMResponse, ToolCall
 
 
 def _retry(fn, tries=4):
+    """Retry only transient errors (429, 5xx, network). Auth/billing/bad-request fail fast."""
     for i in range(tries):
         try:
             return fn()
-        except Exception:
-            if i == tries - 1:
+        except Exception as e:
+            code = getattr(e, "status_code", None) or getattr(e, "code", None)
+            if code in (400, 401, 403, 404) or i == tries - 1:
                 raise
             time.sleep(2 ** i)
 

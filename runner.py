@@ -23,6 +23,13 @@ COLS = ["Risk ID", "Attack ID", "Attack", "Model", "Mitigation", "Trial", "Promp
         "Response", "Tools Called", "Blocked By", "Input Tokens", "Output Tokens", "Timestamp"]
 
 
+def is_fatal(e):
+    """Errors that will repeat for every call (bad key, no credit, unknown model): stop that model."""
+    code = getattr(e, "status_code", None) or getattr(e, "code", None)
+    msg = str(e).lower()
+    return code in (401, 403, 404) or any(k in msg for k in ("credit balance", "api key", "api_key", "billing", "permission", "not found"))
+
+
 def clip(s, n):
     s = str(s).replace("\r", " ")
     return s if len(s) <= n else s[:n] + f"...[truncated, {len(s)} chars]"
@@ -58,9 +65,18 @@ def main():
         if new:
             w.writerow(COLS)
         for model in a.models:
-            provider = get_provider(model)
+            try:
+                provider = get_provider(model)
+            except Exception as e:  # noqa
+                print(f"\n[{model}] cannot start: {e}\nCheck the key in .env. Skipping {model}.\n")
+                continue
+            fatal = False
             for atk in attacks:
+                if fatal:
+                    break
                 for mode in a.modes:
+                    if fatal:
+                        break
                     settings = Settings() if mode == "baseline" else Settings.only(atk.risk)
                     for trial in range(1, a.trials + 1):
                         try:
@@ -70,6 +86,10 @@ def main():
                             else:
                                 label = "REVIEW" if (r.success and r.review) else ("VULNERABLE" if r.success else "BLOCKED")
                         except Exception as e:  # noqa
+                            if is_fatal(e):
+                                print(f"\n[{model}] STOPPED: {str(e)[:300]}\nFix the key, model name or credits in .env / your account, then rerun.\n")
+                                fatal = True
+                                break
                             r = None
                             label = "ERROR"
                             err = repr(e)[:300]
