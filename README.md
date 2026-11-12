@@ -45,6 +45,14 @@ python report\make_report.py results\results.csv          # builds report\report
 ```
 Use `--trials 3` or more: LLM output varies between runs.
 
+## Interactive demo (good for the video)
+```powershell
+python demo.py --mode chatbot --model gemini                       # vulnerable chatbot
+python demo.py --mode chatbot --model gemini --mitigate LLM01      # with LLM01 defence
+python demo.py --mode agent --model claude --mitigate ASI01 ASI02  # agent with defences
+```
+Inside: type messages, `/attacks` lists attack ids, `/run LLM01-A1` runs a stored attack with the current settings, `/quit` exits.
+
 ## Try it by hand
 ```python
 from dotenv import load_dotenv; load_dotenv()

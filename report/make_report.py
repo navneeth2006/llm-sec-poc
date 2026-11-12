@@ -18,6 +18,9 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else "results/results.csv")
 OUT = Path("report")
 rows = list(csv.DictReader(open(SRC, encoding="utf-8-sig")))
+rows = [r for r in rows if r["Result"] != "ERROR"]
+if not rows:
+    sys.exit("No valid results in " + str(SRC) + " (only ERROR rows or empty). Run the real tests first.")
 models = sorted({r["Model"] for r in rows})
 risks = sorted({r["Risk ID"] for r in rows}, key=lambda x: (x.startswith("MCP"), x.startswith("ASI"), x))
 HIT = ("VULNERABLE", "REVIEW")

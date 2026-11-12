@@ -65,7 +65,7 @@ class GeminiProvider:
     def __init__(self, model=None):
         from google import genai
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
-        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
     def _convert(self, messages):
         from google.genai import types
@@ -97,6 +97,10 @@ class GeminiProvider:
         cfg = types.GenerateContentConfig(
             system_instruction=system, max_output_tokens=max_tokens,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True))
+        if "gemini-3" in self.model:
+            # Gemini 3.x thinks by default and thinking tokens count against max_output_tokens.
+            # "low" keeps answers from being cut off. (3.8 does not support "minimal".)
+            cfg.thinking_config = types.ThinkingConfig(thinking_level=os.getenv("GEMINI_THINKING", "low"))
         if tools:
             cfg.tools = [types.Tool(function_declarations=[
                 types.FunctionDeclaration(name=t["name"], description=t["description"], parameters=t["parameters"])
