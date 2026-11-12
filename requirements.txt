@@ -1,0 +1,6 @@
+anthropic>=0.40
+google-genai>=1.0
+python-dotenv>=1.0
+mcp==1.26.0
+matplotlib>=3.8
+reportlab>=4.0
