@@ -5,3 +5,4 @@ __pycache__/
 logs/*.log
 logs/*.jsonl
 results/raw/
+results/old/

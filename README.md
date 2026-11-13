@@ -24,6 +24,20 @@ success **before and after** one mitigation per risk, and demonstrates **MCP** c
 
 Verify risk names against the official OWASP GenAI Security Project pages before submitting.
 
+## Sandbox and safety rules
+- Everything runs on **fake data** with **simulated tools** (virtual files, an outbox instead of real email, a mock web, code that is logged and never executed).
+- Attack goals use **harmless canary markers** such as `STAFF-50-X9Q` and `TOPSECRET-CANARY-5521`, never real secrets or harmful content.
+- Run it in a **Docker container** (below) or a VM. No real keys are stored in the repo; keys come from `.env` (git-ignored).
+
+### Run inside Docker (sandbox)
+```powershell
+docker build -t llm-sec-poc .
+docker run --rm -it --cap-drop ALL --security-opt no-new-privileges --env-file .env `
+  -v "${PWD}\results:/app/results" -v "${PWD}\logs:/app/logs" `
+  llm-sec-poc python runner.py --models claude gemini --trials 3
+docker run --rm -it --env-file .env llm-sec-poc python demo.py --mode agent --model gemini
+```
+
 ## Setup (Windows PowerShell)
 ```powershell
 python -m venv .venv
@@ -33,7 +47,13 @@ Copy-Item .env.example .env      # then put your keys in .env
 ```
 Keys: Gemini from Google AI Studio (free tier). Claude from console.anthropic.com (needs a few dollars of credit).
 
-## Run
+## Run (full pipeline in one command)
+```powershell
+.\run_all.ps1            # runner (both models) + utility + sheet + analysis + report
+python check_ready.py     # pre-submission checklist
+```
+
+## Run (step by step)
 ```powershell
 python runner.py --list                                   # show all attacks
 python runner.py --models mock --out results\mock.csv     # offline pipeline test (NOT real results)

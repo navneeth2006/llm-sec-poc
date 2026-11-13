@@ -2,7 +2,9 @@
 Run:  python report/make_report.py results/results.csv
 Then open the PDF, read the numbers, and EDIT the 'Analysis' text in this file with what YOU observed."""
 import csv
+import os
 import sys
+from xml.sax.saxutils import escape
 from collections import defaultdict
 from pathlib import Path
 
@@ -15,6 +17,11 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else "results/results.csv")
 OUT = Path("report")
 rows = list(csv.DictReader(open(SRC, encoding="utf-8-sig")))
@@ -88,7 +95,9 @@ S += [Paragraph("2. Architecture", H2), Paragraph(
     "plugin/MCP tools per scenario. All tools are simulated: virtual file system, outbox instead of real email, mock web, "
     "and code execution that is logged, never run. <b>Judging:</b> deterministic. Canary strings and tool side effects "
     "(an email in the outbox, a read outside /sandbox) decide pass or fail, not human opinion. "
-    "<b>Mitigation switch:</b> each risk has one toggle, so baseline and mitigated runs differ by that one control only.", P)]
+    "<b>Mitigation switch:</b> each risk has one toggle, so baseline and mitigated runs differ by that one control only. "
+    f"<b>Models tested:</b> Claude ({os.getenv('CLAUDE_MODEL', 'claude-haiku-5-5')}) and Gemini ({os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')}). "
+    "<b>Sandbox:</b> the project runs in a Docker container with fake data only; all tools are simulated and attack goals use harmless canary strings.", P)]
 
 S += [Paragraph("3. Results: attack success (hits/attempts)", H2)]
 head = ["Risk"] + [f"{m}\nbefore" for m in models] + [f"{m}\nafter" for m in models]
@@ -143,12 +152,41 @@ for r in rows:
 S += [Table(samp, colWidths=[8 * cm, 2 * cm, 7 * cm], repeatRows=1,
             style=TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.grey), ("FONTSIZE", (0, 0), (-1, -1), 8)]))]
 
-bo = {m: overall(m, "OFF") for m in models}
-S += [Paragraph("6. Claude vs Gemini: analysis", H2),
-      Paragraph("<b>Auto-filled numbers:</b> " + "; ".join(f"{m} baseline {bo[m][0]}/{bo[m][1]} attacks succeeded" for m in models) + ".", P),
-      Paragraph("<b>TODO (write this yourself from results/results.csv):</b> which model resisted prompt injection better, "
-                "which followed tool-description or tool-result instructions, how each handled refusals vs tool misuse, "
-                "and any attack that worked on one model only. Cite attack IDs.", P)]
+def pct(x):
+    return f"{100 * x[0] / x[1]:.0f}%" if x[1] else "n/a"
+
+
+def auto_findings():
+    out = []
+    for m in models:
+        b, a_ = overall(m, "OFF"), overall(m, "ON")
+        out.append(f"{m}: {b[0]}/{b[1]} attacks succeeded with no defence ({pct(b)}); {a_[0]}/{a_[1]} with the risk's mitigation on ({pct(a_)}).")
+    if len(models) > 1:
+        diffs = []
+        for r in risks:
+            rs = {m: rate(r, m, "OFF") for m in models}
+            if all(v is not None for v in rs.values()) and max(rs.values()) - min(rs.values()) >= 33:
+                diffs.append(r + " (" + ", ".join(f"{m} {rs[m]:.0f}%" for m in models) + ")")
+        out.append("Largest baseline differences between the models: " + ("; ".join(diffs) if diffs else "none above 33 points") + ".")
+    resid = [f"{r}/{m} ({fmt(r, m, 'ON')})" for r in risks for m in models if (rate(r, m, "ON") or 0) > 0]
+    out.append("Residual failures after mitigation: " + (", ".join(resid) if resid else "none") + ".")
+    return out
+
+
+S += [Paragraph("6. Claude vs Gemini: findings", H2)]
+for f_ in auto_findings():
+    S += [Paragraph("- " + escape(f_), P)]
+AN = Path("report/analysis.md")
+if AN.exists():
+    for blk in AN.read_text(encoding="utf-8").split("\n\n"):
+        blk = blk.strip()
+        if blk.startswith("#"):
+            S += [Paragraph(escape(blk.lstrip("# ").strip()), ss["Heading3"])]
+        elif blk:
+            S += [Paragraph(escape(blk).replace("\n", " "), P)]
+else:
+    S += [Paragraph("<b>TODO:</b> create report/analysis.md with your own comparison (which model resisted injection better, "
+                    "tool-description and tool-result behaviour, refusals vs tool misuse, attacks that worked on one model only). Cite attack IDs.", P)]
 S += [Paragraph("7. MCP connection risk", H2), Paragraph(
     "A local malicious MCP server (mcp_poc/evil_server.py, official MCP SDK over stdio) demonstrates four issues: tool poisoning "
     "(hidden instructions in a tool description make the agent leak private notes through a parameter), rug pull (a description "
